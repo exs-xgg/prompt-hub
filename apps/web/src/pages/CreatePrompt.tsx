@@ -1,29 +1,45 @@
 import React, { useState } from 'react';
 import { Save, ArrowLeft } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { createPrompt } from '../api/client';
 
 export default function CreatePrompt() {
   const navigate = useNavigate();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     category: 'Coding',
     platform: 'ChatGPT',
     description: '',
     promptText: '',
-    exampleOutput: ''
+    exampleOutput: '',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setError(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Normally would save here
-    navigate('/');
+    setSubmitting(true);
+    setError(null);
+    try {
+      const created = await createPrompt({
+        title: formData.title.trim(),
+        category: formData.category,
+        platform: formData.platform,
+        description: formData.description.trim(),
+        promptText: formData.promptText.trim(),
+        exampleOutput: formData.exampleOutput.trim() || undefined,
+      });
+      navigate(`/prompt/${created.id}`, { replace: true });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create prompt');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -38,28 +54,36 @@ export default function CreatePrompt() {
         </div>
       </div>
 
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {error}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="bg-white border border-vault-border rounded-xl shadow-sm overflow-hidden">
         <div className="p-6 space-y-6">
-          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="md:col-span-2">
-              <label htmlFor="title" className="block text-sm font-semibold text-slate-700 mb-2">Prompt Title</label>
-              <input 
-                type="text" 
-                id="title" 
+              <label htmlFor="title" className="block text-sm font-semibold text-slate-700 mb-2">
+                Prompt Title
+              </label>
+              <input
+                type="text"
+                id="title"
                 name="title"
                 value={formData.title}
                 onChange={handleChange}
-                className="block w-full rounded-lg border border-slate-200 px-4 py-2.5 text-slate-900 focus:border-vault-primary focus:ring-1 focus:ring-vault-primary sm:text-sm outline-none transition-shadow" 
+                className="block w-full rounded-lg border border-slate-200 px-4 py-2.5 text-slate-900 focus:border-vault-primary focus:ring-1 focus:ring-vault-primary sm:text-sm outline-none transition-shadow"
                 placeholder="e.g., Clean Code Refactorer"
                 required
               />
             </div>
-
             <div>
-              <label htmlFor="category" className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
-              <select 
-                id="category" 
+              <label htmlFor="category" className="block text-sm font-semibold text-slate-700 mb-2">
+                Category
+              </label>
+              <select
+                id="category"
                 name="category"
                 value={formData.category}
                 onChange={handleChange}
@@ -72,11 +96,12 @@ export default function CreatePrompt() {
                 <option value="Other">Other</option>
               </select>
             </div>
-
             <div>
-              <label htmlFor="platform" className="block text-sm font-semibold text-slate-700 mb-2">Best Used In</label>
-              <select 
-                id="platform" 
+              <label htmlFor="platform" className="block text-sm font-semibold text-slate-700 mb-2">
+                Best Used In
+              </label>
+              <select
+                id="platform"
                 name="platform"
                 value={formData.platform}
                 onChange={handleChange}
@@ -90,62 +115,67 @@ export default function CreatePrompt() {
                 <option value="Other">Other</option>
               </select>
             </div>
-
             <div className="md:col-span-2">
-              <label htmlFor="description" className="block text-sm font-semibold text-slate-700 mb-2">Short Description</label>
-              <input 
-                type="text" 
-                id="description" 
+              <label htmlFor="description" className="block text-sm font-semibold text-slate-700 mb-2">
+                Short Description
+              </label>
+              <input
+                type="text"
+                id="description"
                 name="description"
                 value={formData.description}
                 onChange={handleChange}
-                className="block w-full rounded-lg border border-slate-200 px-4 py-2.5 text-slate-900 focus:border-vault-primary focus:ring-1 focus:ring-vault-primary sm:text-sm outline-none transition-shadow" 
+                className="block w-full rounded-lg border border-slate-200 px-4 py-2.5 text-slate-900 focus:border-vault-primary focus:ring-1 focus:ring-vault-primary sm:text-sm outline-none transition-shadow"
                 placeholder="Briefly describe what this prompt does..."
                 required
               />
             </div>
-
             <div className="md:col-span-2">
-              <label htmlFor="promptText" className="block text-sm font-semibold text-slate-700 mb-2">The Prompt</label>
-              <textarea 
-                id="promptText" 
+              <label htmlFor="promptText" className="block text-sm font-semibold text-slate-700 mb-2">
+                The Prompt
+              </label>
+              <textarea
+                id="promptText"
                 name="promptText"
                 value={formData.promptText}
                 onChange={handleChange}
                 rows={6}
-                className="block w-full rounded-lg border border-slate-200 px-4 py-3 text-slate-900 focus:border-vault-primary focus:ring-1 focus:ring-vault-primary sm:text-sm outline-none transition-shadow font-mono text-sm resize-y" 
+                className="block w-full rounded-lg border border-slate-200 px-4 py-3 text-slate-900 focus:border-vault-primary focus:ring-1 focus:ring-vault-primary sm:text-sm outline-none transition-shadow font-mono text-sm resize-y"
                 placeholder="Act as a Senior Software Engineer..."
                 required
               />
               <p className="mt-2 text-xs text-slate-500">Tip: Use [brackets] for variables users should replace.</p>
             </div>
-
             <div className="md:col-span-2">
-              <label htmlFor="exampleOutput" className="block text-sm font-semibold text-slate-700 mb-2">Example Output (Optional)</label>
-              <textarea 
-                id="exampleOutput" 
+              <label htmlFor="exampleOutput" className="block text-sm font-semibold text-slate-700 mb-2">
+                Example Output (Optional)
+              </label>
+              <textarea
+                id="exampleOutput"
                 name="exampleOutput"
                 value={formData.exampleOutput}
                 onChange={handleChange}
                 rows={4}
-                className="block w-full rounded-lg border border-slate-200 px-4 py-3 text-slate-900 focus:border-vault-primary focus:ring-1 focus:ring-vault-primary sm:text-sm outline-none transition-shadow font-mono text-sm resize-y bg-slate-50" 
+                className="block w-full rounded-lg border border-slate-200 px-4 py-3 text-slate-900 focus:border-vault-primary focus:ring-1 focus:ring-vault-primary sm:text-sm outline-none transition-shadow font-mono text-sm resize-y bg-slate-50"
                 placeholder="Paste an example of what the AI generates..."
               />
             </div>
           </div>
-
         </div>
-        
         <div className="bg-slate-50 px-6 py-4 border-t border-vault-border flex items-center justify-end gap-3">
-          <Link to="/" className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">
+          <Link
+            to="/"
+            className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+          >
             Cancel
           </Link>
-          <button 
+          <button
             type="submit"
-            className="flex items-center gap-2 bg-vault-primary text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm cursor-pointer"
+            disabled={submitting}
+            className="flex items-center gap-2 bg-vault-primary text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
-            Publish Prompt
+            {submitting ? 'Publishing...' : 'Publish Prompt'}
           </button>
         </div>
       </form>

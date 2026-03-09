@@ -1,8 +1,25 @@
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom';
 import { Search, Lock, Home, PenTool, Code, BarChart2, Zap, Heart, Clock } from 'lucide-react';
 
 export default function Layout() {
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchInput, setSearchInput] = useState(searchParams.get('q') ?? '');
+
+  useEffect(() => {
+    setSearchInput(searchParams.get('q') ?? '');
+  }, [searchParams]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchInput.trim();
+    if (q) {
+      setSearchParams({ q });
+    } else {
+      setSearchParams({});
+    }
+  };
 
   const navItems = [
     { name: 'All Prompts', icon: Home, path: '/', activeColor: 'bg-blue-50 text-vault-primary' },
@@ -22,18 +39,21 @@ export default function Layout() {
           <span className="text-xl font-bold tracking-tight text-slate-800">PromptVault</span>
         </Link>
 
-        <div className="flex-1 max-w-2xl px-8 hidden md:block">
+        <form onSubmit={handleSearchSubmit} className="flex-1 max-w-2xl px-8 hidden md:block">
           <div className="relative">
             <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-5 w-5 text-slate-400" />
             </span>
-            <input 
-              className="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-full bg-slate-100 focus:bg-white focus:ring-2 focus:ring-vault-primary focus:border-transparent transition-all sm:text-sm outline-none" 
-              placeholder="Search prompts for coding, writing, or analysis..." 
-              type="text"
+            <input
+              className="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-full bg-slate-100 focus:bg-white focus:ring-2 focus:ring-vault-primary focus:border-transparent transition-all sm:text-sm outline-none"
+              placeholder="Search prompts for coding, writing, or analysis..."
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              aria-label="Search prompts"
             />
           </div>
-        </div>
+        </form>
 
         <div className="flex items-center gap-4">
           <Link to="/login" className="text-sm font-medium text-slate-600 hover:text-vault-primary hidden sm:block">Log In</Link>
@@ -48,7 +68,7 @@ export default function Layout() {
           <nav className="p-4 space-y-1 overflow-y-auto flex-1">
             <p className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Categories</p>
             {navItems.map((item) => {
-              const isActive = location.pathname === item.path || (item.path === '/' && location.pathname.startsWith('/category'));
+              const isActive = location.pathname === item.path;
               return (
                 <Link 
                   key={item.name}
