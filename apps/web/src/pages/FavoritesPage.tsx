@@ -2,10 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { getPromptsByIds, votePrompt, type PromptListItem } from '../api/client';
 import { useFavorites } from '../hooks/useFavorites';
+import { useVoterId } from '../hooks/useVoterId';
 import PromptList from '../components/PromptList';
 
 export default function FavoritesPage() {
   const { favoriteIds, toggleFavorite } = useFavorites();
+  const voterId = useVoterId();
   const [prompts, setPrompts] = useState<PromptListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -20,14 +22,14 @@ export default function FavoritesPage() {
     }
     setLoading(true);
     try {
-      const list = await getPromptsByIds(ids);
+      const list = await getPromptsByIds(ids, voterId);
       setPrompts(list);
     } catch {
       setPrompts([]);
     } finally {
       setLoading(false);
     }
-  }, [favoriteIds]);
+  }, [favoriteIds, voterId]);
 
   useEffect(() => {
     load();
@@ -37,9 +39,13 @@ export default function FavoritesPage() {
     if (votingId) return;
     setVotingId(id);
     try {
-      const updated = await votePrompt(id, direction);
+      const updated = await votePrompt(id, direction, voterId);
       setPrompts((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, votes: updated.votes, votesCount: updated.votesCount } : p))
+        prev.map((p) =>
+          p.id === id
+            ? { ...p, votes: updated.votes, votesCount: updated.votesCount, userVote: updated.userVote }
+            : p
+        )
       );
     } finally {
       setVotingId(null);

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { getPrompts, votePrompt, type PromptListItem } from '../api/client';
 import { useFavorites } from '../hooks/useFavorites';
+import { useVoterId } from '../hooks/useVoterId';
 import PromptList from '../components/PromptList';
 
 const CATEGORY_MAP: Record<string, string> = {
@@ -25,6 +26,7 @@ export default function CategoryPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [votingId, setVotingId] = useState<string | null>(null);
   const { favoriteIds, toggleFavorite } = useFavorites();
+  const voterId = useVoterId();
 
   const loadPage = useCallback(
     async (pageNum: number, append: boolean) => {
@@ -37,6 +39,7 @@ export default function CategoryPage() {
           page: pageNum,
           limit: PAGE_SIZE,
           sort: 'newest',
+          voterId,
         });
         if (append) {
           setPrompts((prev) => [...prev, ...data.prompts]);
@@ -51,7 +54,7 @@ export default function CategoryPage() {
         setLoading(false);
       }
     },
-    [category, categorySlug]
+    [category, categorySlug, voterId]
   );
 
   useEffect(() => {
@@ -62,9 +65,13 @@ export default function CategoryPage() {
     if (votingId) return;
     setVotingId(id);
     try {
-      const updated = await votePrompt(id, direction);
+      const updated = await votePrompt(id, direction, voterId);
       setPrompts((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, votes: updated.votes, votesCount: updated.votesCount } : p))
+        prev.map((p) =>
+          p.id === id
+            ? { ...p, votes: updated.votes, votesCount: updated.votesCount, userVote: updated.userVote }
+            : p
+        )
       );
     } finally {
       setVotingId(null);

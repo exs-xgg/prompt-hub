@@ -54,7 +54,10 @@ export default function PromptList({
                 <button
                   onClick={() => onVote(prompt.id, 'up')}
                   disabled={votingId !== null}
-                  className="p-1 hover:text-vault-primary transition-colors cursor-pointer disabled:opacity-50"
+                  className={`p-1 transition-colors cursor-pointer disabled:opacity-50 ${
+                    prompt.userVote === 'up' ? 'text-vault-primary' : 'hover:text-vault-primary'
+                  }`}
+                  title={prompt.userVote === 'up' ? 'Remove vote' : 'Upvote'}
                 >
                   <ChevronUp className="w-5 h-5" />
                 </button>
@@ -62,7 +65,10 @@ export default function PromptList({
                 <button
                   onClick={() => onVote(prompt.id, 'down')}
                   disabled={votingId !== null}
-                  className="p-1 hover:text-red-500 transition-colors cursor-pointer disabled:opacity-50"
+                  className={`p-1 transition-colors cursor-pointer disabled:opacity-50 ${
+                    prompt.userVote === 'down' ? 'text-red-500' : 'hover:text-red-500'
+                  }`}
+                  title={prompt.userVote === 'down' ? 'Remove vote' : 'Downvote'}
                 >
                   <ChevronDown className="w-5 h-5" />
                 </button>

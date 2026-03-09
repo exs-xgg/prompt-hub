@@ -4,6 +4,7 @@ import { ArrowLeft, Copy, Heart, Share2, ChevronUp, ChevronDown, Check } from 'l
 import { getPrompt, votePrompt, type PromptDetail } from '../api/client';
 import { useFavorites } from '../hooks/useFavorites';
 import { useRecent } from '../hooks/useRecent';
+import { useVoterId } from '../hooks/useVoterId';
 
 export default function ViewPrompt() {
   const { id } = useParams<{ id: string }>();
@@ -15,13 +16,14 @@ export default function ViewPrompt() {
   const [voting, setVoting] = useState(false);
   const { favoriteIds, toggleFavorite } = useFavorites();
   const { addRecent } = useRecent();
+  const voterId = useVoterId();
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getPrompt(id)
+    getPrompt(id, voterId)
       .then((p) => {
         if (!cancelled && p) {
           setPrompt(p);
@@ -39,7 +41,7 @@ export default function ViewPrompt() {
     return () => {
       cancelled = true;
     };
-  }, [id, addRecent]);
+  }, [id, addRecent, voterId]);
 
   const handleCopy = () => {
     if (!prompt) return;
@@ -52,8 +54,10 @@ export default function ViewPrompt() {
     if (!id || voting) return;
     setVoting(true);
     try {
-      const updated = await votePrompt(id, direction);
-      setPrompt((prev) => (prev ? { ...prev, votes: updated.votes, votesCount: updated.votesCount } : null));
+      const updated = await votePrompt(id, direction, voterId);
+      setPrompt((prev) =>
+        prev ? { ...prev, votes: updated.votes, votesCount: updated.votesCount, userVote: updated.userVote } : null
+      );
     } finally {
       setVoting(false);
     }
@@ -145,7 +149,10 @@ export default function ViewPrompt() {
                 <button
                   onClick={() => handleVote('up')}
                   disabled={voting}
-                  className="p-2 hover:text-vault-primary transition-colors cursor-pointer rounded-md hover:bg-slate-200 disabled:opacity-50"
+                  className={`p-2 transition-colors cursor-pointer rounded-md hover:bg-slate-200 disabled:opacity-50 ${
+                    prompt.userVote === 'up' ? 'text-vault-primary' : 'hover:text-vault-primary'
+                  }`}
+                  title={prompt.userVote === 'up' ? 'Remove vote' : 'Upvote'}
                 >
                   <ChevronUp className="w-5 h-5" />
                 </button>
@@ -153,7 +160,10 @@ export default function ViewPrompt() {
                 <button
                   onClick={() => handleVote('down')}
                   disabled={voting}
-                  className="p-2 hover:text-red-500 transition-colors cursor-pointer rounded-md hover:bg-slate-200 disabled:opacity-50"
+                  className={`p-2 transition-colors cursor-pointer rounded-md hover:bg-slate-200 disabled:opacity-50 ${
+                    prompt.userVote === 'down' ? 'text-red-500' : 'hover:text-red-500'
+                  }`}
+                  title={prompt.userVote === 'down' ? 'Remove vote' : 'Downvote'}
                 >
                   <ChevronDown className="w-5 h-5" />
                 </button>
@@ -183,27 +193,22 @@ export default function ViewPrompt() {
         </div>
 
         {prompt.author && (
-          <div className="px-6 md:px-8 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {prompt.author.avatar ? (
-                <img
-                  alt={prompt.author.name}
-                  className="h-10 w-10 rounded-full bg-slate-200 object-cover border-2 border-white shadow-sm"
-                  src={prompt.author.avatar}
-                />
-              ) : (
-                <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-semibold">
-                  {prompt.author.name.charAt(0)}
-                </div>
-              )}
-              <div>
-                <p className="text-sm font-bold text-slate-900">{prompt.author.name}</p>
-                <p className="text-xs text-slate-500">{prompt.author.role}</p>
+          <div className="px-6 md:px-8 py-4 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
+            {prompt.author.avatar ? (
+              <img
+                alt={prompt.author.name}
+                className="h-10 w-10 rounded-full bg-slate-200 object-cover border-2 border-white shadow-sm"
+                src={prompt.author.avatar}
+              />
+            ) : (
+              <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-semibold">
+                {prompt.author.name.charAt(0)}
               </div>
+            )}
+            <div>
+              <p className="text-sm font-bold text-slate-900">{prompt.author.name}</p>
+              <p className="text-xs text-slate-500">{prompt.author.role}</p>
             </div>
-            <button className="text-sm font-semibold text-vault-primary hover:text-blue-700 transition-colors cursor-pointer">
-              View Profile
-            </button>
           </div>
         )}
 

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Prompt } from '../models/Prompt.js';
+import { Vote } from '../models/Vote.js';
 
 const router = Router();
 
@@ -31,7 +32,7 @@ interface PromptDoc {
   createdAt: Date;
 }
 
-function toResponse(doc: PromptDoc) {
+function toResponse(doc: PromptDoc, userVote?: 'up' | 'down' | null) {
   const categorySlug = doc.category.toLowerCase().replace(/\s+/g, '-');
   const slugMap: Record<string, string> = {
     'creative-writing': 'writing',
@@ -58,6 +59,7 @@ function toResponse(doc: PromptDoc) {
     author: doc.author ?? { name: 'Anonymous', avatar: '', role: 'Member' },
     createdAt: doc.createdAt,
     createdAgo,
+    ...(userVote !== undefined && { userVote }),
   };
 }
 
@@ -71,10 +73,10 @@ function getCreatedAgo(date: Date): string {
   return `${Math.floor(seconds / 31536000)} years ago`;
 }
 
-// GET /api/prompts - list with category, sort, page, limit, q (search)
+// GET /api/prompts - list with category, sort, page, limit, q (search), voterId (for userVote)
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { category, sort = 'newest', page = '1', limit = '10', q } = req.query;
+    const { category, sort = 'newest', page = '1', limit = '10', q, voterId } = req.query;
     const pageNum = Math.max(1, parseInt(String(page), 10));
     const limitNum = Math.min(50, Math.max(1, parseInt(String(limit), 10)));
     const skip = (pageNum - 1) * limitNum;
@@ -110,7 +112,21 @@ router.get('/', async (req: Request, res: Response) => {
       Prompt.countDocuments(filter),
     ]);
 
-    const prompts = items.map((doc: PromptDoc) => toResponse(doc));
+    let votesByPrompt: Map<string, 1 | -1> = new Map();
+    if (voterId && typeof voterId === 'string' && voterId.trim()) {
+      const promptIds = (items as PromptDoc[]).map((d) => new mongoose.Types.ObjectId(d._id.toString()));
+      const votes = await Vote.find({ promptId: { $in: promptIds }, voterId: voterId.trim() }).lean();
+      votes.forEach((v: { promptId: { toString(): string }; direction: 1 | -1 }) => {
+        votesByPrompt.set(v.promptId.toString(), v.direction);
+      });
+    }
+
+    const prompts = (items as PromptDoc[]).map((doc) => {
+      const userVote = votesByPrompt.has(doc._id.toString())
+        ? (votesByPrompt.get(doc._id.toString()) === 1 ? 'up' : 'down')
+        : null;
+      return toResponse(doc, userVote);
+    });
     res.json({ prompts, total, page: pageNum, limit: limitNum });
   } catch (err) {
     console.error('GET /api/prompts error:', err);
@@ -128,39 +144,64 @@ router.get('/recent', (_req: Request, res: Response) => {
   res.json({ ids: [] });
 });
 
-// GET /api/prompts/by-ids?ids=id1,id2 - batch fetch for favorites/recent
+// GET /api/prompts/by-ids?ids=id1,id2&voterId= - batch fetch for favorites/recent
 router.get('/by-ids', async (req: Request, res: Response) => {
   try {
     const idsParam = req.query.ids;
+    const voterId = typeof req.query.voterId === 'string' ? req.query.voterId.trim() : '';
     if (!idsParam || typeof idsParam !== 'string') {
       return res.json({ prompts: [] });
     }
     const ids = idsParam.split(',').map((s) => s.trim()).filter(Boolean);
     if (ids.length === 0) return res.json({ prompts: [] });
     const validIds = ids.filter((id) => mongoose.isValidObjectId(id));
-    const items = await Prompt.find({ _id: { $in: validIds } }).lean();
+    const objectIds = validIds.map((id) => new mongoose.Types.ObjectId(id));
+    const items = await Prompt.find({ _id: { $in: objectIds } }).lean();
     const orderMap = new Map(validIds.map((id, i) => [id, i]));
     const sorted = [...items].sort((a, b) => {
       const aId = (a as PromptDoc)._id.toString();
       const bId = (b as PromptDoc)._id.toString();
       return (orderMap.get(aId) ?? 0) - (orderMap.get(bId) ?? 0);
     });
-    res.json({ prompts: sorted.map((d) => toResponse(d as PromptDoc)) });
+
+    let votesByPrompt: Map<string, 1 | -1> = new Map();
+    if (voterId && objectIds.length > 0) {
+      const votes = await Vote.find({ promptId: { $in: objectIds }, voterId }).lean();
+      votes.forEach((v: { promptId: { toString(): string }; direction: 1 | -1 }) => {
+        votesByPrompt.set(v.promptId.toString(), v.direction);
+      });
+    }
+
+    res.json({
+      prompts: sorted.map((d) => {
+        const doc = d as PromptDoc;
+        const userVote = votesByPrompt.has(doc._id.toString())
+          ? (votesByPrompt.get(doc._id.toString()) === 1 ? 'up' : 'down')
+          : null;
+        return toResponse(doc, userVote);
+      }),
+    });
   } catch (err) {
     console.error('GET /api/prompts/by-ids error:', err);
     res.status(500).json({ error: 'Failed to fetch prompts' });
   }
 });
 
-// GET /api/prompts/:id
+// GET /api/prompts/:id?voterId= - get one prompt, optional userVote
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const voterId = typeof req.query.voterId === 'string' ? req.query.voterId.trim() : '';
     const prompt = await Prompt.findById(id).lean();
     if (!prompt) {
       return res.status(404).json({ error: 'Prompt not found' });
     }
-    res.json(toResponse(prompt as PromptDoc));
+    let userVote: 'up' | 'down' | null = null;
+    if (voterId && mongoose.isValidObjectId(id)) {
+      const vote = await Vote.findOne({ promptId: id, voterId }).lean();
+      if (vote) userVote = (vote as { direction: 1 | -1 }).direction === 1 ? 'up' : 'down';
+    }
+    res.json(toResponse(prompt as PromptDoc, userVote));
   } catch (err) {
     console.error('GET /api/prompts/:id error:', err);
     res.status(500).json({ error: 'Failed to fetch prompt' });
@@ -192,18 +233,48 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /api/prompts/:id/vote
+// PATCH /api/prompts/:id/vote - body: { direction: 'up'|'down', voterId: string }. One vote per user; same direction toggles off.
 router.patch('/:id/vote', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { direction } = req.body;
+    const { direction, voterId } = req.body;
     if (direction !== 'up' && direction !== 'down') {
       return res.status(400).json({ error: 'Invalid direction; use "up" or "down"' });
     }
-    const delta = direction === 'up' ? 1 : -1;
-    const prompt = await Prompt.findByIdAndUpdate(id, { $inc: { votes: delta } }, { new: true }).lean();
+    if (!voterId || typeof voterId !== 'string' || !voterId.trim()) {
+      return res.status(400).json({ error: 'voterId is required' });
+    }
+    const vid = voterId.trim();
+    const dirNum = direction === 'up' ? 1 : -1;
+
+    const prompt = await Prompt.findById(id);
     if (!prompt) return res.status(404).json({ error: 'Prompt not found' });
-    res.json(toResponse(prompt as PromptDoc));
+
+    const existing = await Vote.findOne({ promptId: id, voterId: vid });
+    let newUserVote: 'up' | 'down' | null = null;
+
+    if (!existing) {
+      await Vote.create({ promptId: id, voterId: vid, direction: dirNum });
+      prompt.votes += dirNum;
+      await prompt.save();
+      newUserVote = direction;
+    } else {
+      if (existing.direction === dirNum) {
+        await Vote.deleteOne({ _id: existing._id });
+        prompt.votes -= dirNum;
+        await prompt.save();
+        newUserVote = null;
+      } else {
+        existing.direction = dirNum;
+        await existing.save();
+        prompt.votes += 2 * dirNum;
+        await prompt.save();
+        newUserVote = direction;
+      }
+    }
+
+    const updated = await Prompt.findById(id).lean();
+    res.json(toResponse(updated as PromptDoc, newUserVote));
   } catch (err) {
     console.error('PATCH /api/prompts/:id/vote error:', err);
     res.status(500).json({ error: 'Failed to vote' });

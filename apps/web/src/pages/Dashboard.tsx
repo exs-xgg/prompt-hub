@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getPrompts, votePrompt, type PromptListItem } from '../api/client';
 import { useFavorites } from '../hooks/useFavorites';
+import { useVoterId } from '../hooks/useVoterId';
 import PromptList from '../components/PromptList';
 
 const SORT_OPTIONS = [
@@ -24,6 +25,7 @@ export default function Dashboard() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [votingId, setVotingId] = useState<string | null>(null);
   const { favoriteIds, toggleFavorite } = useFavorites();
+  const voterId = useVoterId();
 
   const loadPage = useCallback(
     async (pageNum: number, append: boolean) => {
@@ -35,6 +37,7 @@ export default function Dashboard() {
           limit: PAGE_SIZE,
           sort,
           q: q.trim() || undefined,
+          voterId,
         });
         if (append) {
           setPrompts((prev) => [...prev, ...data.prompts]);
@@ -49,7 +52,7 @@ export default function Dashboard() {
         setLoading(false);
       }
     },
-    [sort, q]
+    [sort, q, voterId]
   );
 
   useEffect(() => {
@@ -67,9 +70,18 @@ export default function Dashboard() {
     if (votingId) return;
     setVotingId(id);
     try {
-      const updated = await votePrompt(id, direction);
+      const updated = await votePrompt(id, direction, voterId);
       setPrompts((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, votes: updated.votes, votesCount: updated.votesCount } : p))
+        prev.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                votes: updated.votes,
+                votesCount: updated.votesCount,
+                userVote: updated.userVote ?? undefined,
+              }
+            : p
+        )
       );
     } finally {
       setVotingId(null);
